@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(style='ticks')
 
+
 # Define sentiment columns
 sentiments = ['Negative', 'Neutral', 'Positive']
 
@@ -34,6 +35,30 @@ def explore(data):
     print(any(data.loc[:, sentiments].sum(axis=1) > 1))
 
 
+def wrangle(data, target=sentiments):
+    '''Prepare data for classification'''
+
+    raw_len = len(data.index)
+
+    # Drop duplicate data
+    data.drop_duplicates('Sentence', inplace=True)
+
+    # Reverse one-hot encoding to obtain single target vector
+    data['Sentiment'] = data.loc[:, target].idxmax(axis=1)
+    data.drop(target, axis=1, inplace=True)
+
+    # Define length of sentences by splitting per space
+    data['NumWords'] = data['Sentence'].str.split().str.len()
+
+    # Remove special characters without meaning
+    #
+
+    print('\n')
+    print('{} instances of {} ({:.3f}%) remaining.'.format(
+        len(data.index), raw_len,
+        len(data.index) / raw_len * 100.0))
+
+
 def main():
     # Setup plot output directory
     output_dir = './plots'
@@ -43,6 +68,7 @@ def main():
     data = pd.read_excel('data/sentences_with_sentiment.xlsx')
 
     explore(data)
+    wrangle(data)
 
     return 0
 
