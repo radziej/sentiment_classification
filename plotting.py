@@ -20,3 +20,11 @@ def save_figure(plot, name, suffix='.png', directory='plots'):
         raise ValueError('Attempted to save an object '
                          'that is not a pyplot/seaborn figure ' + str(plot))
     plt.close()
+
+
+def confusion_heatmap(confusion_matrix, labels):
+    hm = sns.heatmap(confusion_matrix, annot=True,
+                     xticklabels=labels,
+                     yticklabels=labels)
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
