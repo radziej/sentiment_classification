@@ -22,7 +22,10 @@ def save_figure(plot, name, suffix='.png', directory='plots'):
     plt.close()
 
 
-def confusion_heatmap(confusion_matrix, labels):
+def confusion_heatmap(confusion_matrix, labels, normalize=False):
+    if normalize:
+        confusion_matrix = (confusion_matrix.astype('float') /
+                            confusion_matrix.sum(axis=1)[:, np.newaxis])
     hm = sns.heatmap(confusion_matrix, annot=True,
                      xticklabels=labels,
                      yticklabels=labels)
