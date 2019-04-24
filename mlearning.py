@@ -10,6 +10,7 @@ import warnings
 warnings.filterwarnings(action='ignore', category=UserWarning, module='gensim')
 from gensim.utils import tokenize
 from gensim.models import Word2Vec
+from nltk.stem import SnowballStemmer
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.metrics import confusion_matrix
@@ -36,7 +37,7 @@ def average_scores(results):
     return result
 
 
-def cross_validate(procedure, parameter_grid, X, y, k=30, cache=False):
+def cross_validate(procedure, parameter_grid, X, y, k=5, cache=True):
     # Reads cache if requested
     output_path = os.path.join('cache', procedure.__name__ + '.pkl')
     if cache and os.path.exists(output_path):
@@ -72,8 +73,24 @@ def filter_parameters(parameters, tag, divider='__'):
             if k.startswith(tag + divider)}
 
 
+# Vectorizer classes built on top of the default sklearn options to allow for
+# stemming of words
+english_stemmer = SnowballStemmer('english')
+class StemmedCountVectorizer(CountVectorizer):
+    def build_analyzer(self):
+        analyzer = super(StemmedCountVectorizer, self).build_analyzer()
+        return lambda doc: ([english_stemmer.stem(w) for w in analyzer(doc)])
+
+
+class StemmedTfidfVectorizer(TfidfVectorizer):
+    def build_analyzer(self):
+        analyzer = super(StemmedTfidfVectorizer, self).build_analyzer()
+        return lambda doc: ([english_stemmer.stem(w) for w in analyzer(doc)])
+
+
+
 def bag_of_words(parameters, X_train, X_val, y_train):
-    vec = CountVectorizer(**filter_parameters(parameters, 'vec'))
+    vec = StemmedCountVectorizer(**filter_parameters(parameters, 'vec'))
     vec.fit(X_train, y_train)
     X_train = vec.transform(X_train)
     X_val = vec.transform(X_val)
@@ -86,7 +103,7 @@ def bag_of_words(parameters, X_train, X_val, y_train):
 
 
 def tf_idf(parameters, X_train, X_val, y_train):
-    vec = TfidfVectorizer(**filter_parameters(parameters, 'vec'))
+    vec = StemmedTfidfVectorizer(**filter_parameters(parameters, 'vec'))
     vec.fit(X_train, y_train)
     X_train = vec.transform(X_train)
     X_val = vec.transform(X_val)
@@ -99,7 +116,7 @@ def tf_idf(parameters, X_train, X_val, y_train):
 
 
 def latent_semantic_analysis(parameters, X_train, X_val, y_train):
-    vec = TfidfVectorizer(**filter_parameters(parameters, 'vec'))
+    vec = StemmedTfidfVectorizer(**filter_parameters(parameters, 'vec'))
 
     vec.fit(X_train, y_train)
     X_train = vec.transform(X_train)
@@ -119,7 +136,7 @@ def latent_semantic_analysis(parameters, X_train, X_val, y_train):
 
 
 def latent_dirichlet_allocation(parameters, X_train, X_val, y_train):
-    vec = TfidfVectorizer(**filter_parameters(parameters, 'vec'))
+    vec = StemmedTfidfVectorizer(**filter_parameters(parameters, 'vec'))
 
     vec.fit(X_train, y_train)
     X_train = vec.transform(X_train)
@@ -139,7 +156,7 @@ def latent_dirichlet_allocation(parameters, X_train, X_val, y_train):
 
 
 def nonnegative_matrix_factorization(parameters, X_train, X_val, y_train):
-    vec = TfidfVectorizer(**filter_parameters(parameters, 'vec'))
+    vec = StemmedTfidfVectorizer(**filter_parameters(parameters, 'vec'))
 
     vec.fit(X_train, y_train)
     X_train = vec.transform(X_train)
