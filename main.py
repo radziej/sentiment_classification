@@ -14,10 +14,13 @@ from scipy import stats
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(style='ticks')
+sns.set_context('talk')
 
 # Machine learning
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import ParameterGrid
+from sklearn.model_selection import StratifiedKFold
+from sklearn.svm import LinearSVC
 from sklearn.naive_bayes import MultinomialNB, ComplementNB, BernoulliNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -92,7 +95,6 @@ def wrangle(data, target=sentiments):
     labels = ['Good data', 'Bad data']
     sizes = [len(data.index), raw_len - len(data.index)]
     plt.pie(sizes, labels=labels, autopct='%1.1f%%')
-    plt.tight_layout()
     plotting.save_figure(plt.gcf(), 'useful_data')
 
 
@@ -132,6 +134,16 @@ def characterize(data):
                      fit=stats.lognorm, fit_kws={'color': next(colors)})
     plt.legend()
     plotting.save_figure(plt.gcf(), 'num_words_fits')
+
+    # Visualize splitting of data
+    fig, ax = plt.subplots()
+    fold = StratifiedKFold(n_splits=5)
+    plotting.cross_validation_indices(
+        fold, data['Sentence'],
+        data['Sentiment'].map(
+            {'Negative': 0, 'Neutral': 1, 'Positive': 2}).sort_values(),
+    ax, 5)
+    plotting.save_figure(fig, 'stratified_cross_fold')
 
 
 def split(data):
@@ -181,41 +193,78 @@ def evaluate_parameter(results, poi, tag, categorical=False, log=False, xticklab
 
 
 def bag_of_words(data):
-    param_grid = {'vec__stop_words': [None, 'english'],
-                  'vec__ngram_range': [(1, 1), (1, 2)],
-                  'vec__min_df': [1, 2, 3],
-                  'vec__max_df': [0.9, 0.95],
-                  'model': [MultinomialNB, ComplementNB, BernoulliNB],
-                  'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
+    # param_grid = {'vec__stop_words': [None, 'english'],
+    #               'vec__ngram_range': [(1, 1), (1, 2)],
+    #               'vec__min_df': [1, 2, 3],
+    #               'vec__max_df': [0.9, 0.95],
+    #               'model': [MultinomialNB, ComplementNB, BernoulliNB],
+    #               'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
+
+    param_grid = [
+        {'vec__stop_words': [None, 'english'],
+         'vec__ngram_range': [(1, 1), (1, 2)],
+         'vec__min_df': [3, 4, 5],
+         'vec__max_df': [0.9, 0.95, 1.0],
+         'model': [LinearSVC],
+         'clf__max_iter': [10000],
+         'clf__dual': [False, True],
+         'clf__class_weight': ['balanced'],
+         'clf__random_state': [0]},
+
+        {'vec__stop_words': [None, 'english'],
+         'vec__ngram_range': [(1, 1), (1, 2)],
+         'vec__min_df': [1, 2, 3],
+         'vec__max_df': [0.9, 0.95, 1.0],
+         'model': [MultinomialNB, ComplementNB, BernoulliNB],
+         'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
+    ]
 
     results = mlearning.cross_validate(
         mlearning.bag_of_words, ParameterGrid(param_grid),
-        data['Sentence'], data['Sentiment'], cache=True)
+        data['Sentence'], data['Sentiment'])
     print('--- Bag-of-words results ---')
+    results = results.sort_values(by='balanced_accuracy_score', ascending=False)
     print(results
-          .sort_values(by='balanced_accuracy_score', ascending=False)
           .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix'], axis=1)
           .rename({'balanced_accuracy_score': 'bas', 'balanced_accuracy_score_std': 'bas_std'}, axis=1)
-          .head(10))
+          .head(20))
 
+    results = results[pd.notna(results['clf__alpha'])]
     evaluate_parameter(results, 'clf__alpha', 'bow', False, True)
     evaluate_parameter(
         results, 'model', 'bow', categorical=True, xticklabels=
-        [str(m).split("'")[1].split('.')[2] for m in param_grid['model']])
-
+        [str(m).split("'")[1].split('.')[-1] for m in results['model'].unique()])
 
 
 def tf_idf(data):
-    param_grid = {'vec__stop_words': [None, 'english'],
-                  'vec__ngram_range': [(1, 1), (1, 2)],
-                  'vec__min_df': [1, 2, 3],
-                  'vec__max_df': [0.9, 0.95],
-                  'model': [MultinomialNB, ComplementNB, BernoulliNB],
-                  'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
+    param_grid = [
+        {'vec__stop_words': [None, 'english'],
+         'vec__ngram_range': [(1, 1), (1, 2)],
+         'vec__min_df': [3, 4, 5],
+         'vec__max_df': [0.9, 0.95, 1.0],
+         'model': [LinearSVC],
+         'clf__max_iter': [10000],
+         'clf__dual': [False, True],
+         'clf__class_weight': ['balanced'],
+         'clf__random_state': [0]},
+
+        {'vec__stop_words': [None, 'english'],
+         'vec__ngram_range': [(1, 1), (1, 2)],
+         'vec__min_df': [1, 2, 3, 4],
+         'vec__max_df': [0.9, 0.95, 1.0],
+         'model': [MultinomialNB, ComplementNB, BernoulliNB],
+         'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
+    ]
+    # param_grid = {'vec__stop_words': [None, 'english'],
+    #               'vec__ngram_range': [(1, 1), (1, 2)],
+    #               'vec__min_df': [1, 2, 3],
+    #               'vec__max_df': [0.9, 0.95],
+    #               'model': [MultinomialNB, ComplementNB, BernoulliNB],
+    #               'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
 
     results = mlearning.cross_validate(
         mlearning.tf_idf, ParameterGrid(param_grid),
-        data['Sentence'], data['Sentiment'], cache=True)
+        data['Sentence'], data['Sentiment'])
     print('--- Tf-Idf results ---')
     print(results
           .sort_values(by='balanced_accuracy_score', ascending=False)
@@ -234,6 +283,18 @@ def latent_semantic_analysis(data):
          'clf__random_state': [0],
          'clf__n_estimators': [100, 150, 200, 300, 500],
          'clf__max_depth': [10, 15, None]},
+
+        # Not close enough
+        # {'vec__stop_words': [None, 'english'],
+        #  'vec__ngram_range': [(1, 1), (1, 2)],
+        #  'vec__min_df': [1, 2],
+        #  'lda__n_components': [30, 50, 70],
+        #  'model': [LinearSVC],
+        #  'clf__max_iter': [10000],
+        #  'clf__dual': [False, True],
+        #  'clf__class_weight': ['balanced'],
+        #  'clf__random_state': [0]},
+
         # Does not even come close
         # {'vec__stop_words': [None, 'english'],
         #  'vec__ngram_range': [(1, 1), (1, 2)],
@@ -246,7 +307,7 @@ def latent_semantic_analysis(data):
 
     results = mlearning.cross_validate(
         mlearning.latent_semantic_analysis, ParameterGrid(param_grid),
-        data['Sentence'], data['Sentiment'], cache=True)
+        data['Sentence'], data['Sentiment'])
     print('--- LSA results ---')
     print(results
           .sort_values(by='balanced_accuracy_score', ascending=False)
@@ -272,7 +333,7 @@ def latent_dirichlet_allocation(data):
 
     results = mlearning.cross_validate(
         mlearning.latent_dirichlet_allocation, ParameterGrid(param_grid),
-        data['Sentence'], data['Sentiment'], cache=True)
+        data['Sentence'], data['Sentiment'])
     print('--- LDA results ---')
     print(results
           .sort_values(by='balanced_accuracy_score', ascending=False)
@@ -300,7 +361,7 @@ def nonnegative_matrix_factorization(data):
 
     results = mlearning.cross_validate(
         mlearning.nonnegative_matrix_factorization, ParameterGrid(param_grid),
-        data['Sentence'], data['Sentiment'], cache=True)
+        data['Sentence'], data['Sentiment'])
     print('--- NMF results ---')
     print(results
           .sort_values(by='balanced_accuracy_score', ascending=False)
@@ -321,7 +382,7 @@ def word2vec(data):
 
     results = mlearning.cross_validate(
         mlearning.word2vec, ParameterGrid(param_grid),
-        data['Sentence'], data['Sentiment'], cache=True)
+        data['Sentence'], data['Sentiment'])
     print('--- W2V results ---')
     print(results
           .sort_values(by='balanced_accuracy_score', ascending=False)
