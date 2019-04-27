@@ -30,9 +30,9 @@ def confusion_heatmap(confusion_matrix, labels, normalize=False):
     if normalize:
         confusion_matrix = (confusion_matrix.astype('float') /
                             confusion_matrix.sum(axis=1)[:, np.newaxis])
-    hm = sns.heatmap(confusion_matrix, annot=True,
-                     xticklabels=labels,
-                     yticklabels=labels)
+    plt.figure()
+    sns.heatmap(confusion_matrix, annot=True, xticklabels=labels)
+    plt.yticks(np.arange(len(labels)) + 0.5, labels, va='center')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
 

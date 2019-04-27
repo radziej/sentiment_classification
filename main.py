@@ -136,14 +136,14 @@ def characterize(data):
     plotting.save_figure(plt.gcf(), 'num_words_fits')
 
     # Visualize splitting of data
-    fig, ax = plt.subplots()
+    plt.figure()
     fold = StratifiedKFold(n_splits=5)
     plotting.cross_validation_indices(
         fold, data['Sentence'],
         data['Sentiment'].map(
             {'Negative': 0, 'Neutral': 1, 'Positive': 2}).sort_values(),
     ax, 5)
-    plotting.save_figure(fig, 'stratified_cross_fold')
+    plotting.save_figure(plt.gcf(), 'stratified_cross_fold')
 
 
 def conjunction(conditions):
@@ -258,6 +258,15 @@ def tf_idf(data):
           .head(20))
 
     mlearning.characterize_optimum(results, data, mlearning.tf_idf)
+
+    # Confusion matrix
+    optimum = results.loc[results['balanced_accuracy_score'].idxmax()]
+    plotting.confusion_heatmap(optimum['confusion_matrix'], sentiments)
+    plotting.save_figure(plt.gcf(), 'confusion_heatmap')
+    plotting.confusion_heatmap(optimum['confusion_matrix'], sentiments, True)
+    plotting.save_figure(plt.gcf(), 'confusion_heatmap_norm')
+
+    # Hyperparameter dependency
     evaluate_parameter(results, 'clf__alpha', 'tfidf',
                        ylabel='Balanced accuracy score', xlabel='Alpha', log=True)
     evaluate_parameter(results, 'vec__max_df', 'tfidf',
