@@ -17,7 +17,6 @@ sns.set(style='ticks')
 sns.set_context('talk')
 
 # Machine learning
-from sklearn.model_selection import train_test_split
 from sklearn.model_selection import ParameterGrid
 from sklearn.model_selection import StratifiedKFold
 from sklearn.svm import LinearSVC
@@ -34,7 +33,8 @@ import mlearning
 sentiments = ['Negative', 'Neutral', 'Positive']
 scores = ['confusion_matrix',
           'accuracy_score', 'accuracy_score_std',
-          'balanced_accuracy_score', 'balanced_accuracy_score_std']
+          'balanced_accuracy_score', 'balanced_accuracy_score_std',
+          'parameters']
 selected_score = 'balanced_accuracy_score'
 selected_score_std = selected_score + '_std'
 
@@ -54,17 +54,17 @@ def explore(data):
 
     print('--- Available columns ---')
     print(data.columns)
-    print('\n')
+    print()
     print('--- First few lines of data ---')
     print(data.head(10))
-    print('\n')
+    print()
     print('--- Missing data ---')
     print(data.isnull().sum())
-    print('\n')
+    print()
     print('--- Duplicates ---')
     print(data[data.duplicated('Sentence')])
     print('Number of duplicates:', len(data[data.duplicated('Sentence')].index))
-    print('\n')
+    print()
     print('--- Duplicate sentiments ---')
     print(any(data.loc[:, sentiments].sum(axis=1) > 1))
 
@@ -146,102 +146,53 @@ def characterize(data):
     plotting.save_figure(fig, 'stratified_cross_fold')
 
 
-def split(data):
-    '''Splits the data into training and testing subsets
-
-    As the data is imbalanced with respect to the sentiments, the splitting is
-    stratified. The goal is to operate with the same relative amounts of
-    sentiments in order to avoid testing with samples consistint predominantly
-    of one category.'''
-
-    return train_test_split(data['Sentence'], data['Sentiment'],
-        test_size=0.25, stratify=data['Sentiment'], random_state=0)
-
-
 def conjunction(conditions):
     return functools.reduce(np.logical_and, conditions)
 
 
-def evaluate_parameter(results, poi, tag, categorical=False, log=False, xticklabels=None):
+def evaluate_parameter(results, poi, tag,
+                       xlabel=None, ylabel=None,
+                       categorical=False, log=False, xticklabels=None):
     # Replace NaN (or None) with 0 to allow for Python-style logical comparison
     results = results.fillna(0)
     # Create parameter index (without scores) to filter results with
-    optimum = results.iloc[results[selected_score].idxmax()]
+    optimum = results.loc[results[selected_score].idxmax()]
     idx = optimum.index.drop(scores)
     # Get sample of results where all parameters are identical except for the
     # parameter of interest
     sample = results[conjunction([results[n] == optimum[n] for n in idx.drop(poi)])]
 
     if categorical:
-        sns.catplot(x=poi, y=selected_score, data=sample, kind='bar')
-        # if xticklabels:
-        #     plt.xticklabels(xticklabels)
-        plt.ylabel(selected_score)
-        plt.xlabel(poi)
-        plotting.save_figure(plt.gcf(), poi)
+        c = sns.catplot(x=poi, y=selected_score, data=sample, kind='bar')
+        plt.ylabel(ylabel if ylabel else selected_score)
+        plt.xlabel(xlabel if xlabel else poi)
+        if xticklabels:
+            vals, labels = plt.xticks()
+            plt.xticks(vals,
+                       [xticklabels(l.get_text()) for l in labels],
+                       rotation=30)
+            plt.xlabel('')
+        plotting.save_figure(plt.gcf(), tag + '_' + poi)
     else:
+        sample = sample.sort_values(by=poi)
         plt.figure()
         plt.errorbar(x=poi, y=selected_score, data=sample)
         plt.fill_between(sample[poi],
                         sample[selected_score] - sample[selected_score_std],
                         sample[selected_score] + sample[selected_score_std],
                         alpha=0.2)
-        plt.ylabel(selected_score)
-        plt.xlabel(poi)
+        plt.ylabel(ylabel if ylabel else selected_score)
+        plt.xlabel(xlabel if xlabel else poi)
         if log: plt.xscale('log')
         plotting.save_figure(plt.gcf(), tag + '_' + poi)
 
 
 def bag_of_words(data):
-    # param_grid = {'vec__stop_words': [None, 'english'],
-    #               'vec__ngram_range': [(1, 1), (1, 2)],
-    #               'vec__min_df': [1, 2, 3],
-    #               'vec__max_df': [0.9, 0.95],
-    #               'model': [MultinomialNB, ComplementNB, BernoulliNB],
-    #               'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
-
     param_grid = [
         {'vec__stop_words': [None, 'english'],
          'vec__ngram_range': [(1, 1), (1, 2)],
          'vec__min_df': [3, 4, 5],
-         'vec__max_df': [0.9, 0.95, 1.0],
-         'model': [LinearSVC],
-         'clf__max_iter': [10000],
-         'clf__dual': [False, True],
-         'clf__class_weight': ['balanced'],
-         'clf__random_state': [0]},
-
-        {'vec__stop_words': [None, 'english'],
-         'vec__ngram_range': [(1, 1), (1, 2)],
-         'vec__min_df': [1, 2, 3],
-         'vec__max_df': [0.9, 0.95, 1.0],
-         'model': [MultinomialNB, ComplementNB, BernoulliNB],
-         'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
-    ]
-
-    results = mlearning.cross_validate(
-        mlearning.bag_of_words, ParameterGrid(param_grid),
-        data['Sentence'], data['Sentiment'])
-    print('--- Bag-of-words results ---')
-    results = results.sort_values(by='balanced_accuracy_score', ascending=False)
-    print(results
-          .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix'], axis=1)
-          .rename({'balanced_accuracy_score': 'bas', 'balanced_accuracy_score_std': 'bas_std'}, axis=1)
-          .head(20))
-
-    results = results[pd.notna(results['clf__alpha'])]
-    evaluate_parameter(results, 'clf__alpha', 'bow', False, True)
-    evaluate_parameter(
-        results, 'model', 'bow', categorical=True, xticklabels=
-        [str(m).split("'")[1].split('.')[-1] for m in results['model'].unique()])
-
-
-def tf_idf(data):
-    param_grid = [
-        {'vec__stop_words': [None, 'english'],
-         'vec__ngram_range': [(1, 1), (1, 2)],
-         'vec__min_df': [3, 4, 5],
-         'vec__max_df': [0.9, 0.95, 1.0],
+         'vec__max_df': [0.9, 0.95],
          'model': [LinearSVC],
          'clf__max_iter': [10000],
          'clf__dual': [False, True],
@@ -251,26 +202,73 @@ def tf_idf(data):
         {'vec__stop_words': [None, 'english'],
          'vec__ngram_range': [(1, 1), (1, 2)],
          'vec__min_df': [1, 2, 3, 4],
-         'vec__max_df': [0.9, 0.95, 1.0],
+         'vec__max_df': [0.5, 0.75, 0.9, 0.95],
          'model': [MultinomialNB, ComplementNB, BernoulliNB],
          'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
     ]
-    # param_grid = {'vec__stop_words': [None, 'english'],
-    #               'vec__ngram_range': [(1, 1), (1, 2)],
-    #               'vec__min_df': [1, 2, 3],
-    #               'vec__max_df': [0.9, 0.95],
-    #               'model': [MultinomialNB, ComplementNB, BernoulliNB],
-    #               'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
+
+    results = mlearning.cross_validate(
+        mlearning.bag_of_words, ParameterGrid(param_grid),
+        data['Sentence'], data['Sentiment']
+    ).sort_values(by='balanced_accuracy_score', ascending=False)
+    print('--- Bag-of-words results ---')
+    print(results
+          .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix', 'parameters'], axis=1)
+          .rename({'balanced_accuracy_score': 'bas', 'balanced_accuracy_score_std': 'bas_std'}, axis=1)
+          .head(20))
+
+    mlearning.characterize_optimum(results, data, mlearning.bag_of_words)
+    # results = results[pd.notna(results['clf__alpha'])]
+    # evaluate_parameter(results, 'clf__alpha', 'bow', False, True)
+    # evaluate_parameter(
+    #     results, 'model', 'bow', categorical=True, xticklabels=
+    #     [str(m).split("'")[1].split('.')[-1] for m in results['model'].unique()])
+
+
+def tf_idf(data):
+    param_grid = [
+        {'vec__stop_words': [None, 'english'],
+         'vec__ngram_range': [(1, 1), (1, 2)],
+         'vec__min_df': [3, 4, 5],
+         'vec__max_df': [0.5, 0.75, 0.9],
+         # 'vec__sublinear_tf': [True, False],
+         'model': [LinearSVC],
+         'clf__max_iter': [10000],
+         'clf__dual': [False, True],
+         'clf__class_weight': ['balanced'],
+         'clf__random_state': [0]},
+
+        {'vec__stop_words': [None, 'english'],
+         'vec__ngram_range': [(1, 1), (1, 2)],
+         'vec__min_df': [1, 2, 3, 4],
+         'vec__max_df': [0.5, 0.75, 0.9, 0.95],
+         'vec__sublinear_tf': [True, False],
+         'model': [MultinomialNB, ComplementNB, BernoulliNB],
+         'clf__alpha': [0.001, 0.01, 0.1, 1.0]}
+    ]
 
     results = mlearning.cross_validate(
         mlearning.tf_idf, ParameterGrid(param_grid),
-        data['Sentence'], data['Sentiment'])
+        data['Sentence'], data['Sentiment']
+    ).sort_values(by='balanced_accuracy_score', ascending=False)
     print('--- Tf-Idf results ---')
     print(results
-          .sort_values(by='balanced_accuracy_score', ascending=False)
-          .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix'], axis=1)
+          .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix', 'parameters'], axis=1)
           .rename({'balanced_accuracy_score': 'bas', 'balanced_accuracy_score_std': 'bas_std'}, axis=1)
-          .head(10))
+          .head(20))
+
+    mlearning.characterize_optimum(results, data, mlearning.tf_idf)
+    evaluate_parameter(results, 'clf__alpha', 'tfidf',
+                       ylabel='Balanced accuracy score', xlabel='Alpha', log=True)
+    evaluate_parameter(results, 'vec__max_df', 'tfidf',
+                       ylabel='Balanced accuracy score', xlabel='Max doc frequency')
+    evaluate_parameter(results, 'vec__min_df', 'tfidf',
+                       ylabel='Balanced accuracy score', xlabel='Min doc frequency')
+    evaluate_parameter(results, 'vec__ngram_range', 'tfidf',
+                       ylabel='Balanced accuracy score', xlabel='n-gram range', categorical=True)
+    evaluate_parameter(
+        results, 'model', 'tfidf', ylabel='Balanced accuracy score', categorical=True,
+        xticklabels=lambda x: str(x).split("'")[1].split('.')[-1])
 
 
 def latent_semantic_analysis(data):
@@ -278,10 +276,12 @@ def latent_semantic_analysis(data):
         {'vec__stop_words': [None, 'english'],
          'vec__ngram_range': [(1, 1), (1, 2)],
          'vec__min_df': [1, 2],
+         'vec__max_df': [0.5, 0.75, 0.9, 0.95],
+         'vec__sublinear_tf': [True, False],
          'lda__n_components': [10, 20, 30],
          'model': [RandomForestClassifier],
          'clf__random_state': [0],
-         'clf__n_estimators': [100, 150, 200, 300, 500],
+         'clf__n_estimators': [150, 200, 300, 500],
          'clf__max_depth': [10, 15, None]},
 
         # Not close enough
@@ -314,6 +314,7 @@ def latent_semantic_analysis(data):
           .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix'], axis=1)
           .rename({'balanced_accuracy_score': 'bas', 'balanced_accuracy_score_std': 'bas_std'}, axis=1)
           .head(10))
+    mlearning.characterize_optimum(results, data, mlearning.latent_semantic_analysis)
 
 
 def latent_dirichlet_allocation(data):
@@ -321,13 +322,13 @@ def latent_dirichlet_allocation(data):
         'vec__stop_words': [None, 'english'],
         'vec__ngram_range': [(1, 1)],  # (1, 2) doesnt perform well
         'vec__min_df': [1, 2],
+        'vec__max_df': [0.4, 0.5, 0.6],
         'lda__n_components': [10, 20, 30],
-        'lda__max_iter': [5],
-        'lda__learning_offset': [50.],
+        'lda__learning_offset': [10., 20., 40.],
         'lda__random_state': [0],
         'model': [RandomForestClassifier],
         'clf__random_state': [0],
-        'clf__n_estimators': [100, 150, 200, 300, 500],
+        'clf__n_estimators': [100, 150, 200],
         'clf__max_depth': [10, 15, None]
     }
 
@@ -337,25 +338,27 @@ def latent_dirichlet_allocation(data):
     print('--- LDA results ---')
     print(results
           .sort_values(by='balanced_accuracy_score', ascending=False)
-          .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix'], axis=1)
+          .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix', 'parameters'], axis=1)
           .rename({'balanced_accuracy_score': 'bas', 'balanced_accuracy_score_std': 'bas_std'}, axis=1)
           .head(10))
 
+    mlearning.characterize_optimum(results, data, mlearning.latent_dirichlet_allocation)
 
 def nonnegative_matrix_factorization(data):
     param_grid = {
         'vec__stop_words': [None, 'english'],
         'vec__ngram_range': [(1, 1), (1, 2)],
         'vec__min_df': [1, 2],
-        'nmf__n_components': [10],
+        'vec__max_df': [0.5, 0.75, 0.9, 0.95],
+        'nmf__n_components': [10, 20, 30],
         'nmf__beta_loss': ['kullback-leibler'],
         'nmf__solver': ['mu'],
         'nmf__max_iter': [1000],
-        'nmf__alpha': [0.1],
-        'nmf__l1_ratio': [0.5],
+        'nmf__alpha': [0.0, 0.1],
+        # 'nmf__l1_ratio': [0.5],
         'model': [RandomForestClassifier],
         'clf__random_state': [0],
-        'clf__n_estimators': [100, 150, 200, 300, 500],
+        'clf__n_estimators': [150, 200, 300, 500],
         'clf__max_depth': [10, 15, None]
     }
 
@@ -365,9 +368,10 @@ def nonnegative_matrix_factorization(data):
     print('--- NMF results ---')
     print(results
           .sort_values(by='balanced_accuracy_score', ascending=False)
-          .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix'], axis=1)
+          .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix', 'parameters'], axis=1)
           .rename({'balanced_accuracy_score': 'bas', 'balanced_accuracy_score_std': 'bas_std'}, axis=1)
           .head(10))
+    mlearning.characterize_optimum(results, data, mlearning.nonnegative_matrix_factorization)
 
 
 def word2vec(data):
@@ -389,6 +393,7 @@ def word2vec(data):
           .drop(['accuracy_score', 'accuracy_score_std', 'confusion_matrix'], axis=1)
           .rename({'balanced_accuracy_score': 'bas', 'balanced_accuracy_score_std': 'bas_std'}, axis=1)
           .head(10))
+    mlearning.characterize_optimum(results, data, mlearning.word2vec)
 
 
 def main():
